@@ -56,7 +56,7 @@ func TestGetErrorDetailLevel(t *testing.T) {
 func TestErrorWithLocation(t *testing.T) {
 	// First, show example formats
 	t.Run("show_formats", func(t *testing.T) {
-		ExampleErrorFormats(t)
+		TestErrorFormats(t)
 	})
 
 	tests := []struct {
@@ -225,7 +225,7 @@ func TestPrintErrorAndReturn(t *testing.T) {
 	}
 }
 
-func ExampleErrorFormats(t *testing.T) {
+func TestErrorFormats(t *testing.T) {
 	// Save original env var to restore later
 	origEnv := os.Getenv("ERROR_DETAIL_LEVEL")
 	defer os.Setenv("ERROR_DETAIL_LEVEL", origEnv)
