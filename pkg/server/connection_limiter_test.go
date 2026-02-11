@@ -104,6 +104,39 @@ func TestGracePeriodSameIP(t *testing.T) {
 	}
 }
 
+func TestGraceOnlyAllowsOneExtra(t *testing.T) {
+	cl := NewConnectionLimiter(2)
+	defer cl.Stop()
+
+	// Two IPs at capacity
+	cl.Acquire("10.0.0.1", "100")
+	cl.Acquire("10.0.0.2", "200")
+
+	// Grace: same IP opens a second stream (channel switch) — allowed, now at 3
+	err := cl.Acquire("10.0.0.1", "101")
+	if err != nil {
+		t.Fatalf("first grace should allow: %v", err)
+	}
+	if cl.ActiveCount() != 3 {
+		t.Errorf("expected 3 active during grace, got %d", cl.ActiveCount())
+	}
+
+	// Now at max+1 — another acquire from same IP should be REJECTED
+	err = cl.Acquire("10.0.0.1", "102")
+	if err == nil {
+		t.Fatal("expected rejection: grace should only allow one extra, not unlimited")
+	}
+	if cl.ActiveCount() != 3 {
+		t.Errorf("expected still 3 active (rejected should not add), got %d", cl.ActiveCount())
+	}
+
+	// Another IP also rejected
+	err = cl.Acquire("10.0.0.2", "201")
+	if err == nil {
+		t.Fatal("expected rejection for second IP when already over limit")
+	}
+}
+
 func TestGracePeriodDifferentIPRejected(t *testing.T) {
 	cl := NewConnectionLimiter(2)
 	defer cl.Stop()
@@ -307,13 +340,19 @@ func TestMultiviewSameDevice(t *testing.T) {
 		t.Errorf("expected 2 active, got %d", cl.ActiveCount())
 	}
 
-	// Same device switching one of the channels — grace period
+	// Same device switching one of the channels — grace period (2 -> 3)
 	err := cl.Acquire("10.0.0.1", "300")
 	if err != nil {
 		t.Fatalf("multiview channel switch should be allowed via grace: %v", err)
 	}
 
-	// Old stream disconnects
+	// Can't open yet another — grace only allows one extra
+	err = cl.Acquire("10.0.0.1", "400")
+	if err == nil {
+		t.Fatal("expected rejection: already used grace, can't keep growing")
+	}
+
+	// Old stream disconnects — back to max
 	cl.Release("10.0.0.1", "100")
 	if cl.ActiveCount() != 2 {
 		t.Errorf("expected 2 active after release, got %d", cl.ActiveCount())

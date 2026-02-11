@@ -134,24 +134,27 @@ func (cl *ConnectionLimiter) checkLimit(clientIP string) error {
 		return nil
 	}
 
-	// Grace period: if the same IP already has an active stream, allow max+1 briefly.
-	// This handles channel switching where the old stream hasn't disconnected yet.
-	if cl.ipHasActiveStream(clientIP) {
+	// Grace period: allow exactly one extra connection for an IP that already has
+	// an active stream. This handles channel switching where the old stream hasn't
+	// disconnected yet. The grace only applies if total active is exactly at the
+	// limit (not already over it from a previous grace).
+	if len(cl.active) == cl.maxConnections && cl.countIPStreams(clientIP) > 0 {
 		return nil
 	}
 
 	return fmt.Errorf("max connections reached (%d/%d)", len(cl.active), cl.maxConnections)
 }
 
-// ipHasActiveStream returns true if the given IP has at least one active stream.
+// countIPStreams returns the number of active streams for the given IP.
 // Must be called with cl.mu held.
-func (cl *ConnectionLimiter) ipHasActiveStream(clientIP string) bool {
+func (cl *ConnectionLimiter) countIPStreams(clientIP string) int {
+	count := 0
 	for _, entry := range cl.active {
 		if entry.clientIP == clientIP {
-			return true
+			count++
 		}
 	}
-	return false
+	return count
 }
 
 func (cl *ConnectionLimiter) sweepStaleHLS() {
