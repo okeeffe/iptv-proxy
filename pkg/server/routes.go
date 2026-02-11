@@ -77,6 +77,7 @@ func (c *Config) m3uRoutes(r *gin.RouterGroup) {
 		trackConfig := &Config{
 			ProxyConfig: c.ProxyConfig,
 			track:       &c.playlist.Tracks[i],
+			limiter:     c.limiter,
 		}
 
 		if strings.HasSuffix(track.URI, ".m3u8") {

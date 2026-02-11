@@ -385,6 +385,13 @@ func (c *Config) xtreamXMLTV(ctx *gin.Context) {
 
 func (c *Config) xtreamStreamHandler(ctx *gin.Context) {
 	id := ctx.Param("id")
+
+	if err := c.limiter.Acquire(ctx.ClientIP(), id); err != nil {
+		ctx.JSON(http.StatusTooManyRequests, gin.H{"error": "max streams reached"})
+		return
+	}
+	defer c.limiter.Release(ctx.ClientIP(), id)
+
 	rpURL, err := url.Parse(fmt.Sprintf("%s/%s/%s/%s", c.XtreamBaseURL, c.XtreamUser, c.XtreamPassword, id))
 	if err != nil {
 		ctx.AbortWithError(http.StatusInternalServerError, utils.PrintErrorAndReturn(err)) // nolint: errcheck
@@ -396,6 +403,13 @@ func (c *Config) xtreamStreamHandler(ctx *gin.Context) {
 
 func (c *Config) xtreamStreamLive(ctx *gin.Context) {
 	id := ctx.Param("id")
+
+	if err := c.limiter.Acquire(ctx.ClientIP(), id); err != nil {
+		ctx.JSON(http.StatusTooManyRequests, gin.H{"error": "max streams reached"})
+		return
+	}
+	defer c.limiter.Release(ctx.ClientIP(), id)
+
 	rpURL, err := url.Parse(fmt.Sprintf("%s/live/%s/%s/%s", c.XtreamBaseURL, c.XtreamUser, c.XtreamPassword, id))
 	if err != nil {
 		ctx.AbortWithError(http.StatusInternalServerError, utils.PrintErrorAndReturn(err)) // nolint: errcheck
@@ -408,6 +422,13 @@ func (c *Config) xtreamStreamLive(ctx *gin.Context) {
 func (c *Config) xtreamStreamPlay(ctx *gin.Context) {
 	token := ctx.Param("token")
 	t := ctx.Param("type")
+
+	if err := c.limiter.Acquire(ctx.ClientIP(), token); err != nil {
+		ctx.JSON(http.StatusTooManyRequests, gin.H{"error": "max streams reached"})
+		return
+	}
+	defer c.limiter.Release(ctx.ClientIP(), token)
+
 	rpURL, err := url.Parse(fmt.Sprintf("%s/play/%s/%s", c.XtreamBaseURL, token, t))
 	if err != nil {
 		ctx.AbortWithError(http.StatusInternalServerError, utils.PrintErrorAndReturn(err)) // nolint: errcheck
@@ -421,6 +442,13 @@ func (c *Config) xtreamStreamTimeshift(ctx *gin.Context) {
 	duration := ctx.Param("duration")
 	start := ctx.Param("start")
 	id := ctx.Param("id")
+
+	if err := c.limiter.Acquire(ctx.ClientIP(), id); err != nil {
+		ctx.JSON(http.StatusTooManyRequests, gin.H{"error": "max streams reached"})
+		return
+	}
+	defer c.limiter.Release(ctx.ClientIP(), id)
+
 	rpURL, err := url.Parse(fmt.Sprintf("%s/timeshift/%s/%s/%s/%s/%s", c.XtreamBaseURL, c.XtreamUser, c.XtreamPassword, duration, start, id))
 	if err != nil {
 		ctx.AbortWithError(http.StatusInternalServerError, utils.PrintErrorAndReturn(err)) // nolint: errcheck
@@ -432,6 +460,13 @@ func (c *Config) xtreamStreamTimeshift(ctx *gin.Context) {
 
 func (c *Config) xtreamStreamMovie(ctx *gin.Context) {
 	id := ctx.Param("id")
+
+	if err := c.limiter.Acquire(ctx.ClientIP(), id); err != nil {
+		ctx.JSON(http.StatusTooManyRequests, gin.H{"error": "max streams reached"})
+		return
+	}
+	defer c.limiter.Release(ctx.ClientIP(), id)
+
 	rpURL, err := url.Parse(fmt.Sprintf("%s/movie/%s/%s/%s", c.XtreamBaseURL, c.XtreamUser, c.XtreamPassword, id))
 	if err != nil {
 		ctx.AbortWithError(http.StatusInternalServerError, utils.PrintErrorAndReturn(err)) // nolint: errcheck
@@ -443,6 +478,13 @@ func (c *Config) xtreamStreamMovie(ctx *gin.Context) {
 
 func (c *Config) xtreamStreamSeries(ctx *gin.Context) {
 	id := ctx.Param("id")
+
+	if err := c.limiter.Acquire(ctx.ClientIP(), id); err != nil {
+		ctx.JSON(http.StatusTooManyRequests, gin.H{"error": "max streams reached"})
+		return
+	}
+	defer c.limiter.Release(ctx.ClientIP(), id)
+
 	rpURL, err := url.Parse(fmt.Sprintf("%s/series/%s/%s/%s", c.XtreamBaseURL, c.XtreamUser, c.XtreamPassword, id))
 	if err != nil {
 		ctx.AbortWithError(http.StatusInternalServerError, utils.PrintErrorAndReturn(err)) // nolint: errcheck
@@ -453,6 +495,13 @@ func (c *Config) xtreamStreamSeries(ctx *gin.Context) {
 }
 
 func (c *Config) xtreamHlsStream(ctx *gin.Context) {
+	token := ctx.Param("token")
+
+	if err := c.limiter.Touch(ctx.ClientIP(), token); err != nil {
+		ctx.JSON(http.StatusTooManyRequests, gin.H{"error": "max streams reached"})
+		return
+	}
+
 	chunk := ctx.Param("chunk")
 	s := strings.Split(chunk, "_")
 	if len(s) != 2 {
@@ -475,7 +524,7 @@ func (c *Config) xtreamHlsStream(ctx *gin.Context) {
 			"%s://%s/hls/%s/%s",
 			url.Scheme,
 			url.Host,
-			ctx.Param("token"),
+			token,
 			ctx.Param("chunk"),
 		),
 	)
@@ -489,6 +538,13 @@ func (c *Config) xtreamHlsStream(ctx *gin.Context) {
 }
 
 func (c *Config) xtreamHlsrStream(ctx *gin.Context) {
+	token := ctx.Param("token")
+
+	if err := c.limiter.Touch(ctx.ClientIP(), token); err != nil {
+		ctx.JSON(http.StatusTooManyRequests, gin.H{"error": "max streams reached"})
+		return
+	}
+
 	channel := ctx.Param("channel")
 
 	url, err := getHlsRedirectURL(channel)
@@ -502,7 +558,7 @@ func (c *Config) xtreamHlsrStream(ctx *gin.Context) {
 			"%s://%s/hlsr/%s/%s/%s/%s/%s/%s",
 			url.Scheme,
 			url.Host,
-			ctx.Param("token"),
+			token,
 			c.XtreamUser,
 			c.XtreamPassword,
 			ctx.Param("channel"),
