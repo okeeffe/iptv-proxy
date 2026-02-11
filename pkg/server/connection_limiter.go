@@ -126,7 +126,11 @@ func (cl *ConnectionLimiter) ActiveCount() int {
 // checkLimit checks whether a new connection from clientIP is allowed.
 // Must be called with cl.mu held.
 func (cl *ConnectionLimiter) checkLimit(clientIP string) error {
-	if cl.maxConnections <= 0 {
+	if cl.maxConnections < 0 {
+		return fmt.Errorf("all connections blocked (max_connections=%d)", cl.maxConnections)
+	}
+
+	if cl.maxConnections == 0 {
 		return nil
 	}
 

@@ -151,6 +151,25 @@ func TestGracePeriodDifferentIPRejected(t *testing.T) {
 	}
 }
 
+func TestBlockAllMode(t *testing.T) {
+	cl := NewConnectionLimiter(-1)
+	defer cl.Stop()
+
+	err := cl.Acquire("10.0.0.1", "100")
+	if err == nil {
+		t.Fatal("expected all connections blocked with max=-1")
+	}
+
+	err = cl.Touch("10.0.0.1", "token-abc")
+	if err == nil {
+		t.Fatal("expected HLS also blocked with max=-1")
+	}
+
+	if cl.ActiveCount() != 0 {
+		t.Errorf("expected 0 active, got %d", cl.ActiveCount())
+	}
+}
+
 func TestUnlimitedMode(t *testing.T) {
 	cl := NewConnectionLimiter(0)
 	defer cl.Stop()
