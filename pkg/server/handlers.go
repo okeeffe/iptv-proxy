@@ -42,6 +42,14 @@ func (c *Config) getM3U(ctx *gin.Context) {
 }
 
 func (c *Config) reverseProxy(ctx *gin.Context) {
+	streamID := path.Base(c.track.URI)
+
+	if err := c.limiter.Acquire(ctx.ClientIP(), streamID); err != nil {
+		ctx.JSON(http.StatusTooManyRequests, gin.H{"error": "max streams reached"})
+		return
+	}
+	defer c.limiter.Release(ctx.ClientIP(), streamID)
+
 	rpURL, err := url.Parse(c.track.URI)
 	if err != nil {
 		ctx.AbortWithError(http.StatusInternalServerError, err) // nolint: errcheck
@@ -53,6 +61,11 @@ func (c *Config) reverseProxy(ctx *gin.Context) {
 
 func (c *Config) m3u8ReverseProxy(ctx *gin.Context) {
 	id := ctx.Param("id")
+
+	if err := c.limiter.Touch(ctx.ClientIP(), path.Base(c.track.URI)); err != nil {
+		ctx.JSON(http.StatusTooManyRequests, gin.H{"error": "max streams reached"})
+		return
+	}
 
 	rpURL, err := url.Parse(strings.ReplaceAll(c.track.URI, path.Base(c.track.URI), id))
 	if err != nil {

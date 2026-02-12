@@ -26,11 +26,13 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/gin-contrib/cors"
 	"github.com/jamesnetherton/m3u"
 	"github.com/pierre-emmanuelJ/iptv-proxy/pkg/config"
+	xtreamapi "github.com/pierre-emmanuelJ/iptv-proxy/pkg/xtream-proxy"
 	uuid "github.com/satori/go.uuid"
 
 	"github.com/gin-gonic/gin"
@@ -51,6 +53,8 @@ type Config struct {
 	proxyfiedM3UPath string
 
 	endpointAntiColision string
+
+	limiter *ConnectionLimiter
 }
 
 // NewServer initialize a new server configuration
@@ -68,12 +72,35 @@ func NewServer(config *config.ProxyConfig) (*Config, error) {
 		endpointAntiColision = trimmedCustomId
 	}
 
+	// Query provider for max connections limit
+	maxConnections := 0
+	if config.XtreamBaseURL != "" {
+		client, err := xtreamapi.New(config.XtreamUser.String(), config.XtreamPassword.String(), config.XtreamBaseURL, "iptv-proxy")
+		if err != nil {
+			log.Printf("[iptv-proxy] Warning: could not query provider for max connections: %v", err)
+		} else {
+			maxConnections = int(client.UserInfo.MaxConnections)
+			log.Printf("[iptv-proxy] Provider max connections: %d", maxConnections)
+		}
+	}
+
+	// Override with env var if set (emergency use only)
+	if override := os.Getenv("MAX_CONNECTIONS"); override != "" {
+		if v, err := strconv.Atoi(override); err == nil {
+			log.Printf("[iptv-proxy] Max connections overridden by MAX_CONNECTIONS env var: %d (was %d)", v, maxConnections)
+			maxConnections = v
+		} else {
+			log.Printf("[iptv-proxy] Warning: invalid MAX_CONNECTIONS value %q, ignoring", override)
+		}
+	}
+
 	return &Config{
-		config,
-		&p,
-		nil,
-		defaultProxyfiedM3UPath,
-		endpointAntiColision,
+		ProxyConfig:          config,
+		playlist:             &p,
+		track:                nil,
+		proxyfiedM3UPath:     defaultProxyfiedM3UPath,
+		endpointAntiColision: endpointAntiColision,
+		limiter:              NewConnectionLimiter(maxConnections),
 	}, nil
 }
 

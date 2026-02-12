@@ -253,6 +253,74 @@ Replace `iptv.proxyexample.xyz` in `docker-compose.yml` with your desired domain
 $ docker-compose up -d
 ```
 
+## Connection Limiter
+
+The proxy enforces the provider's max connections limit to prevent silent failures when too many devices stream simultaneously.
+
+### How it works
+
+On startup, the proxy queries the provider's Xtream API and reads `UserInfo.MaxConnections`. Each stream handler tracks active connections by `clientIP:streamID`. When the limit is reached, new streams from unknown IPs get an HTTP 429 response.
+
+**Startup log confirms the limit:**
+```
+[iptv-proxy] Provider max connections: 2
+```
+
+### Stream types
+
+- **Long-lived streams** (live, VOD, series, timeshift): Tracked with `Acquire()`/`Release()`. The slot is held for the entire duration of `io.Copy` — which blocks until the client disconnects. `defer Release()` fires when the handler returns.
+- **HLS streams** (short chunk requests): Tracked with `Touch()`. Each chunk refreshes a `lastSeen` timestamp. A background goroutine sweeps entries older than 30 seconds every 10 seconds.
+
+### Grace period for channel switching
+
+When at capacity and a request arrives from an IP that already has an active stream, exactly one extra connection is allowed (`max + 1`). This handles the brief overlap during channel switches where the new stream opens before the old one disconnects.
+
+- Grace only triggers when `active == max` (not when already over)
+- New IPs at capacity are always rejected
+- The old stream's `Release()` fires within ~2 seconds, restoring the count
+
+**Observed behavior:** TiviMate typically switches channels sequentially (disconnect old, then connect new), so the grace period acts as a safety net rather than the primary mechanism.
+
+### `MAX_CONNECTIONS` env var override
+
+For emergency use — overrides the provider-reported limit:
+
+| Value | Behavior |
+|-------|----------|
+| `-1` | Block all streams (kill switch) |
+| `0` | Unlimited (disable limiter) |
+| `N` | Enforce N connections |
+| Unset | Use provider's value |
+
+```
+[iptv-proxy] Max connections overridden by MAX_CONNECTIONS env var: 4 (was 2)
+```
+
+### Log examples
+
+```
+# Normal operation
+Connection acquired: 192.168.1.159:333866.ts (active: 1/2)
+Connection released: 192.168.1.159:333866.ts (active: 0/2)
+
+# Channel switch with grace
+Connection acquired: 192.168.1.159:333869.ts (active: 2/2)   ← new channel (grace)
+Connection released: 192.168.1.159:333866.ts (active: 1/2)   ← old channel cleanup
+
+# Rejection
+max connections reached (2/2)  → HTTP 429 {"error": "max streams reached"}
+
+# HLS
+HLS connection acquired: 192.168.1.45:token-abc (active: 1/2)
+HLS connection expired: 192.168.1.45:token-abc (active: 0/2)  ← 30s timeout
+```
+
+### Troubleshooting
+
+- **Streams rejected unexpectedly**: Check logs for `max connections reached`, verify limit at startup. Emergency: set `MAX_CONNECTIONS=0` to disable.
+- **Stale connections**: Long-lived streams clean up via `defer`. HLS entries expire after 30s. If a stream hangs, the provider will eventually close its side.
+- **Kill switch**: Set `MAX_CONNECTIONS=-1` to reject all new streams. Existing streams continue until they disconnect.
+
 ## TODO
 
 there is basic auth just for testing.
